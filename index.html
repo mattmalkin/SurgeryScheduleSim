@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Surgical Scheduling & PAC Triage Simulator</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    .dark ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
+    input[type=range] { accent-color: #0d9488; }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased min-h-screen transition-colors duration-200 pb-12">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 pt-2 sm:pt-0">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-teal-500/20 shrink-0">
+          <i data-lucide="activity" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-2">
+            Dual-Facility Simulator
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 border border-teal-200 dark:border-teal-800">v3.0 Dynamic</span>
+          </h1>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400">Zero Travel • Dynamic Capacity Models</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+        <select id="presetSelector" onchange="applyPreset(this.value)" class="text-xs font-medium bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer shrink-0">
+          <option value="baseline" selected>Scenario: Baseline (80% 1st Pass)</option>
+          <option value="rapid_opt">Scenario: Rapid Opt (50% Clearance)</option>
+          <option value="main_backlog">Scenario: Main Bottleneck</option>
+          <option value="high_major">Scenario: 50/50 Case Mix</option>
+        </select>
+        <button onclick="copyExecutiveReport()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 transition shrink-0">
+          <i data-lucide="clipboard-copy" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Copy Report</span>
+        </button>
+        <button onclick="downloadJSON()" class="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 transition shrink-0" title="Export JSON">
+          <i data-lucide="download" class="w-4 h-4"></i>
+        </button>
+        <button onclick="toggleTheme()" class="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 transition shrink-0" title="Toggle Theme">
+          <i data-lucide="moon" class="w-4 h-4 dark:hidden"></i>
+          <i data-lucide="sun" class="w-4 h-4 hidden dark:inline"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Banner -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 flex items-center bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 text-sm space-x-2 pointer-events-none">
+    <i data-lucide="check-circle-2" class="w-5 h-5 text-teal-400"></i>
+    <span id="toastMsg">Action completed!</span>
+  </div>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- KPI Cards -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- KPI 1 -->
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
+        <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+          <span>Avg Minor Wait</span>
+          <i data-lucide="clock" class="w-4 h-4 text-teal-500"></i>
+        </div>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="kpiParallelWait" class="text-3xl font-extrabold text-slate-900 dark:text-white">--</span>
+          <span class="text-xs text-slate-400">Parallel</span>
+        </div>
+        <div class="mt-1 flex items-center text-[11px]">
+          <span id="kpiWaitSavingsBadge" class="text-emerald-600 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">
+            <span id="kpiWaitDiff">--</span> saved
+          </span>
+          <span class="text-slate-400 ml-1">vs Seq (<span id="kpiSeqWait">--</span>)</span>
+        </div>
+        <div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between text-[11px] text-slate-500">
+          <span>Avg PAC Delay:</span>
+          <span id="kpiAvgPacDelay" class="font-bold text-teal-600 dark:text-teal-400">--</span>
+        </div>
+      </div>
+
+      <!-- KPI 2 -->
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
+        <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+          <span>Tier 4 Tail Delay</span>
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
+        </div>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="kpiTier4Wait" class="text-3xl font-extrabold text-rose-600 dark:text-rose-400">--</span>
+          <span class="text-xs text-slate-400">Pre-booked</span>
+        </div>
+        <div class="mt-1 flex items-center text-[11px] text-slate-500">
+          <span class="text-emerald-600 font-bold mr-1" id="kpiTier4Saved">--</span> saved vs Seq (<span id="kpiTier4SeqWait">--</span>)
+        </div>
+      </div>
+
+      <!-- KPI 3 -->
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
+        <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+          <span>Facility Demand Split</span>
+          <i data-lucide="split" class="w-4 h-4 text-blue-500"></i>
+        </div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <div>
+            <span id="kpiAscShare" class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">--</span>
+            <div class="text-[10px] text-slate-500">ASC Target: <span id="lblAscTargetPct">--</span>%</div>
+          </div>
+          <div class="text-right">
+            <span id="kpiMainShare" class="text-xl font-bold text-rose-600 dark:text-rose-400">--</span>
+            <div class="text-[10px] text-slate-500">Main Target: <span id="lblMainTargetPct">--</span>%</div>
+          </div>
+        </div>
+        <div class="mt-2 w-full bg-rose-100 dark:bg-rose-950 rounded-full h-1.5 flex overflow-hidden">
+          <div id="kpiSplitBar" class="bg-emerald-500 h-1.5 transition-all duration-300"></div>
+        </div>
+      </div>
+
+      <!-- KPI 4 -->
+      <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
+        <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+          <span>Capacity Balance</span>
+          <i id="balanceIcon" data-lucide="activity" class="w-4 h-4 text-emerald-500"></i>
+        </div>
+        <div class="mt-2 flex items-baseline space-x-2">
+          <span id="kpiCapacityRatio" class="text-3xl font-extrabold text-slate-900 dark:text-white">--</span>
+          <span class="text-xs text-slate-400">ASC:Main (Actual)</span>
+        </div>
+        <div class="mt-1 flex items-center text-[11px]">
+          <span id="balanceStatusText" class="font-semibold text-emerald-600 flex items-center gap-1">--</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Layout: Left Controls (5 cols) + Right Viz (7 cols) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- LEFT COLUMN -->
+      <div class="lg:col-span-5 space-y-6">
+
+        <!-- Controls Form -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-5">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h2 class="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+              <i data-lucide="sliders" class="w-4 h-4 text-teal-600"></i> Simulation Parameters
+            </h2>
+            <button onclick="resetToDefaults()" class="text-xs text-slate-500 hover:text-teal-600 transition">Reset</button>
+          </div>
+
+          <!-- Capacity & Queue Settings (Includes New Ratio) -->
+          <div class="space-y-3">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Facility & Queue Targets</div>
+            
+            <div class="grid grid-cols-2 gap-3">
+              <!-- New Custom Capacity Ratio -->
+              <div class="col-span-2 sm:col-span-1 p-2 bg-teal-50/50 dark:bg-teal-900/10 rounded-lg border border-teal-100 dark:border-teal-800/30">
+                <label class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">Target ASC:Main Ratio</label>
+                <div class="flex items-center space-x-2">
+                  <input type="number" id="inputAscRatio" min="0.5" max="10" step="0.5" value="2" oninput="updateSimulation()" class="w-full font-mono text-sm bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-teal-700 dark:text-teal-400 focus:ring-teal-500 text-center">
+                  <span class="text-sm font-bold text-slate-500">: 1</span>
+                </div>
+              </div>
+              
+              <div class="col-span-2 sm:col-span-1 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <label class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">Safety Buffer (Days)</label>
+                <input type="number" id="inputBuffer" min="0" max="30" step="1" value="8" oninput="updateSimulation()" class="w-full font-mono text-sm bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 focus:ring-teal-500 text-center">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between text-[11px] mb-1">
+                  <span class="text-slate-600 dark:text-slate-400">ASC Backlog</span>
+                  <span id="valAscBacklog" class="font-mono text-teal-600 font-bold">10d</span>
+                </div>
+                <input type="range" id="inputAscBacklog" min="3" max="30" step="1" value="10" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+              </div>
+              <div>
+                <div class="flex justify-between text-[11px] mb-1">
+                  <span class="text-slate-600 dark:text-slate-400">Main Backlog</span>
+                  <span id="valMainBacklog" class="font-mono text-rose-600 font-bold">24d</span>
+                </div>
+                <input type="range" id="inputMainBacklog" min="7" max="60" step="1" value="24" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+              </div>
+            </div>
+          </div>
+
+          <!-- Volume & Mix -->
+          <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Volume & Procedure Mix</div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 dark:text-slate-400">Total Weekly Cases</span>
+                <span id="valTotalCases" class="font-mono text-teal-600 font-bold">137</span>
+              </div>
+              <input type="range" id="inputTotalCases" min="30" max="400" step="5" value="137" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 dark:text-slate-400">Minor Procedures %</span>
+                <span id="valMinorPct" class="font-mono text-teal-600 font-bold">73%</span>
+              </div>
+              <input type="range" id="inputMinorPct" min="20" max="95" step="1" value="73" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+          </div>
+
+          <!-- PAC Custom Delays -->
+          <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div class="flex justify-between items-center">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">PAC Screening Delays (Days)</div>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="text-center">
+                <label class="block text-[10px] text-slate-500 mb-1">Neg Screen</label>
+                <input type="number" id="inputDelayNeg" min="0" max="30" value="0" oninput="updateSimulation()" class="w-full font-mono text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-center focus:ring-teal-500">
+              </div>
+              <div class="text-center">
+                <label class="block text-[10px] text-slate-500 mb-1">Human Rev</label>
+                <input type="number" id="inputDelayHuman" min="0" max="60" value="3" oninput="updateSimulation()" class="w-full font-mono text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-center focus:ring-teal-500">
+              </div>
+              <div class="text-center">
+                <label class="block text-[10px] text-slate-500 mb-1">Optimization</label>
+                <input type="number" id="inputDelayOpt" min="1" max="120" value="30" oninput="updateSimulation()" class="w-full font-mono text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-center focus:ring-amber-500">
+              </div>
+            </div>
+          </div>
+
+          <!-- PAC Conversion Rates -->
+          <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">PAC Triage Rates</div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 dark:text-slate-400">Neg Questionnaire Rate</span>
+                <span id="valQuestNeg" class="font-mono text-teal-600 font-bold">40%</span>
+              </div>
+              <input type="range" id="inputQuestNeg" min="10" max="75" step="1" value="40" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 dark:text-slate-400">1st-Pass Human Appr Rate</span>
+                <span id="valFirstPass" class="font-mono text-teal-600 font-bold">80%</span>
+              </div>
+              <input type="range" id="inputFirstPass" min="10" max="95" step="1" value="80" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 dark:text-slate-400">Optimization ASC Appr Rate</span>
+                <span id="valOptPass" class="font-mono text-teal-600 font-bold">25%</span>
+              </div>
+              <input type="range" id="inputOptPass" min="5" max="75" step="1" value="25" oninput="updateSimulation()" class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+          </div>
+        </div>
+
+        <!-- Funnel Breakdown Table -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-slate-900 dark:text-white text-sm">Minor Cohort Yield</h3>
+            <span class="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded" id="badgeAscTotalRate">--</span>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between p-2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-white">Tier 1: Negative Screen</div>
+                <div class="text-[10px] text-slate-500" id="lblTier1Subtext">--</div>
+              </div>
+              <div class="text-right">
+                <span id="tier1Pct" class="font-mono font-bold text-teal-600">--</span>
+                <div class="text-[9px] text-slate-400" id="tier1Cases">--</div>
+              </div>
+            </div>
+            <div class="flex justify-between p-2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-white">Tier 2: 1st-Pass Approved</div>
+                <div class="text-[10px] text-slate-500" id="lblTier2Subtext">--</div>
+              </div>
+              <div class="text-right">
+                <span id="tier2Pct" class="font-mono font-bold text-teal-600">--</span>
+                <div class="text-[9px] text-slate-400" id="tier2Cases">--</div>
+              </div>
+            </div>
+            <div class="flex justify-between p-2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-white" id="lblTier3Title">--</div>
+                <div class="text-[10px] text-slate-500" id="lblTier3Subtext">--</div>
+              </div>
+              <div class="text-right">
+                <span id="tier3Pct" class="font-mono font-bold text-amber-600">--</span>
+                <div class="text-[9px] text-slate-400" id="tier3Cases">--</div>
+              </div>
+            </div>
+            <div class="flex justify-between p-2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+              <div>
+                <div class="font-semibold text-slate-900 dark:text-white" id="lblTier4Title">--</div>
+                <div class="text-[10px] text-slate-500" id="lblTier4Subtext">--</div>
+              </div>
+              <div class="text-right">
+                <span id="tier4Pct" class="font-mono font-bold text-rose-600">--</span>
+                <div class="text-[9px] text-slate-400" id="tier4Cases">--</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- Chart -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 dark:border-slate-800 pb-3 mb-3 gap-2">
+            <div>
+              <h2 class="font-bold text-slate-900 dark:text-white text-sm">Days-to-Surgery Comparison</h2>
+              <p class="text-[11px] text-slate-500" id="chartSubtitle">Sequential Hold vs Parallel Pre-Booking</p>
+            </div>
+            <div class="flex items-center space-x-3 text-[10px] sm:text-xs">
+              <span class="flex items-center gap-1"><span class="w-3 h-3 bg-slate-400 rounded-sm"></span> Sequential</span>
+              <span class="flex items-center gap-1 font-semibold text-teal-600"><span class="w-3 h-3 bg-teal-500 rounded-sm"></span> Parallel Pre-Book</span>
+            </div>
+          </div>
+          <div class="relative h-60 w-full mb-3">
+            <canvas id="waitChart"></canvas>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-300">
+            <strong>Insight:</strong> Booking Tier 4 patients on Day <span id="insightHumanDay" class="font-bold text-teal-600">--</span> for Day <span id="insightTargetDay" class="font-bold text-teal-600">--</span> lets their <span id="insightOptDay">--</span>-day workup overlap the backlog, saving <span id="insightSavings" class="font-bold text-emerald-600">--</span> days.
+          </div>
+        </div>
+
+        <!-- Workflow Rules -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+          <h2 class="font-bold text-slate-900 dark:text-white text-sm mb-3">Operational Rules & Policy</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+            <div class="p-3 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+              <strong class="text-teal-700 dark:text-teal-400 block mb-1">1. Zero-Travel Full-Day Blocks</strong>
+              Surgeons operate exclusively at one site per day. Blocks are allocated using the target ratio of <strong id="rule1Ratio">--</strong> ASC : 1 Main.
+            </div>
+            <div class="p-3 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+              <strong class="text-teal-700 dark:text-teal-400 block mb-1" id="rule2Title">2. Day-[X] Pre-Booking</strong>
+              Patients failing 1st-pass review book at Day <strong id="rule2HumanDay">--</strong> for Day <strong id="rule2TargetDay">--</strong> at Main. Their <span id="rule2OptDay">--</span>d optimization runs parallel to the queue.
+            </div>
+            <div class="p-3 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+              <strong class="text-teal-700 dark:text-teal-400 block mb-1">3. Tier 3 ASC Promotion</strong>
+              Patients successfully optimized at Day <strong id="rule3OptDay">--</strong> promote to near-term ASC blocks, releasing their Main slot <strong id="rule3AdvDays">--</strong> days in advance.
+            </div>
+            <div class="p-3 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+              <strong class="text-teal-700 dark:text-teal-400 block mb-1">4. Anti-Leakage Gate</strong>
+              Cleared healthy minor patients must not book Main Hospital slots.
+            </div>
+          </div>
+        </div>
+
+        <!-- Block Allocator -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+          <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2 mb-3">
+            <h2 class="font-bold text-slate-900 dark:text-white text-sm">Weekly OR Block Calculator</h2>
+            <select id="surgeonCountSelect" onchange="updateSimulation()" class="text-xs bg-slate-100 dark:bg-slate-800 border-none rounded px-2 py-1">
+              <option value="4">4 Surg</option>
+              <option value="6" selected>6 Surg</option>
+              <option value="8">8 Surg</option>
+            </select>
+          </div>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-center">
+            <div class="p-2 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800">
+              <div class="text-[9px] uppercase text-emerald-700 dark:text-emerald-400">ASC Vol</div>
+              <div id="allocAscCases" class="font-bold text-sm text-emerald-800 dark:text-emerald-300">--</div>
+            </div>
+            <div class="p-2 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800">
+              <div class="text-[9px] uppercase text-emerald-700 dark:text-emerald-400">ASC OR-Days</div>
+              <div id="allocAscDays" class="font-bold text-sm text-emerald-800 dark:text-emerald-300">--</div>
+            </div>
+            <div class="p-2 rounded bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800">
+              <div class="text-[9px] uppercase text-rose-700 dark:text-rose-400">Main Vol</div>
+              <div id="allocMainCases" class="font-bold text-sm text-rose-800 dark:text-rose-300">--</div>
+            </div>
+            <div class="p-2 rounded bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800">
+              <div class="text-[9px] uppercase text-rose-700 dark:text-rose-400">Main OR-Days</div>
+              <div id="allocMainDays" class="font-bold text-sm text-rose-800 dark:text-rose-300">--</div>
+            </div>
+          </div>
+          
+          <div class="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded">
+            <table class="w-full text-[10px] text-left">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                <tr><th class="p-1.5 px-2">Surgeon</th><th class="p-1.5 text-center">Block Pattern (Per Cycle)</th></tr>
+              </thead>
+              <tbody id="rosterTableBody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // System State
+    const state = {
+      ascRatio: 2.0, // target ASC:Main ratio
+      totalCases: 137,
+      minorPct: 73,
+      questNegPct: 40,
+      firstPassPct: 80,
+      optPassPct: 25,
+      delayNeg: 0,
+      delayHuman: 3,
+      delayOpt: 30,
+      ascBacklog: 10,
+      mainBacklog: 24,
+      safetyBuffer: 8,
+      surgeonCount: 6,
+      darkMode: false
+    };
+
+    let waitChart = null;
+
+    const PRESETS = {
+      baseline: { ascRatio: 2, totalCases: 137, minorPct: 73, questNegPct: 40, firstPassPct: 80, optPassPct: 25, delayNeg: 0, delayHuman: 3, delayOpt: 30, ascBacklog: 10, mainBacklog: 24, safetyBuffer: 8 },
+      rapid_opt: { ascRatio: 2, totalCases: 137, minorPct: 73, questNegPct: 40, firstPassPct: 80, optPassPct: 50, delayNeg: 0, delayHuman: 3, delayOpt: 30, ascBacklog: 10, mainBacklog: 24, safetyBuffer: 8 },
+      main_backlog: { ascRatio: 2, totalCases: 137, minorPct: 73, questNegPct: 40, firstPassPct: 80, optPassPct: 25, delayNeg: 0, delayHuman: 3, delayOpt: 30, ascBacklog: 8, mainBacklog: 45, safetyBuffer: 8 },
+      high_major: { ascRatio: 1, totalCases: 137, minorPct: 50, questNegPct: 40, firstPassPct: 80, optPassPct: 25, delayNeg: 0, delayHuman: 3, delayOpt: 30, ascBacklog: 10, mainBacklog: 28, safetyBuffer: 8 }
+    };
+
+    function init() {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme(true);
+      lucide.createIcons();
+      initChart();
+      updateSimulation();
+    }
+
+    function toggleTheme() { setTheme(!state.darkMode); }
+    function setTheme(isDark) {
+      state.darkMode = isDark;
+      document.documentElement.classList.toggle('dark', isDark);
+      if (waitChart) {
+        waitChart.options.scales.x.grid.color = isDark ? '#334155' : '#f1f5f9';
+        waitChart.options.scales.y.grid.color = isDark ? '#334155' : '#f1f5f9';
+        waitChart.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b';
+        waitChart.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b';
+        waitChart.update();
+      }
+    }
+
+    function applyPreset(key) {
+      const p = PRESETS[key];
+      if (!p) return;
+      Object.assign(state, p);
+      
+      document.getElementById('inputAscRatio').value = state.ascRatio;
+      document.getElementById('inputTotalCases').value = state.totalCases;
+      document.getElementById('inputMinorPct').value = state.minorPct;
+      document.getElementById('inputQuestNeg').value = state.questNegPct;
+      document.getElementById('inputFirstPass').value = state.firstPassPct;
+      document.getElementById('inputOptPass').value = state.optPassPct;
+      document.getElementById('inputDelayNeg').value = state.delayNeg;
+      document.getElementById('inputDelayHuman').value = state.delayHuman;
+      document.getElementById('inputDelayOpt').value = state.delayOpt;
+      document.getElementById('inputAscBacklog').value = state.ascBacklog;
+      document.getElementById('inputMainBacklog').value = state.mainBacklog;
+      document.getElementById('inputBuffer').value = state.safetyBuffer;
+
+      updateSimulation();
+      showToast(`Loaded Preset!`);
+    }
+
+    function resetToDefaults() {
+      document.getElementById('presetSelector').value = 'baseline';
+      applyPreset('baseline');
+    }
+
+    function clamp(val, min, max, def) {
+      const n = parseFloat(val);
+      return isNaN(n) ? def : Math.max(min, Math.min(max, n));
+    }
+
+    function updateSimulation() {
+      // 1. Read Inputs
+      state.ascRatio = clamp(document.getElementById('inputAscRatio').value, 0.5, 10, 2);
+      state.totalCases = parseInt(document.getElementById('inputTotalCases').value);
+      state.minorPct = parseInt(document.getElementById('inputMinorPct').value);
+      state.questNegPct = parseInt(document.getElementById('inputQuestNeg').value);
+      state.firstPassPct = parseInt(document.getElementById('inputFirstPass').value);
+      state.optPassPct = parseInt(document.getElementById('inputOptPass').value);
+      state.delayNeg = clamp(document.getElementById('inputDelayNeg').value, 0, 30, 0);
+      state.delayHuman = clamp(document.getElementById('inputDelayHuman').value, 0, 60, 3);
+      state.delayOpt = clamp(document.getElementById('inputDelayOpt').value, 1, 120, 30);
+      state.ascBacklog = parseInt(document.getElementById('inputAscBacklog').value);
+      state.mainBacklog = parseInt(document.getElementById('inputMainBacklog').value);
+      state.safetyBuffer = parseInt(document.getElementById('inputBuffer').value);
+      state.surgeonCount = parseInt(document.getElementById('surgeonCountSelect').value);
+
+      // Simple UI Updates
+      document.getElementById('valTotalCases').innerText = state.totalCases;
+      document.getElementById('valMinorPct').innerText = `${state.minorPct}%`;
+      document.getElementById('valQuestNeg').innerText = `${state.questNegPct}%`;
+      document.getElementById('valFirstPass').innerText = `${state.firstPassPct}%`;
+      document.getElementById('valOptPass').innerText = `${state.optPassPct}%`;
+      document.getElementById('valAscBacklog').innerText = `${state.ascBacklog}d`;
+      document.getElementById('valMainBacklog').innerText = `${state.mainBacklog}d`;
+
+      // Capacity Target Math
+      const targetAscPct = state.ascRatio / (state.ascRatio + 1);
+      const targetMainPct = 1 / (state.ascRatio + 1);
+      document.getElementById('lblAscTargetPct').innerText = (targetAscPct * 100).toFixed(1);
+      document.getElementById('lblMainTargetPct').innerText = (targetMainPct * 100).toFixed(1);
+
+      // PAC Math
+      const qNeg = state.questNegPct / 100;
+      const qPos = 1 - qNeg;
+      const t1 = qNeg;
+      const firstPass = state.firstPassPct / 100;
+      const t2 = qPos * firstPass;
+      const unopt = qPos * (1 - firstPass);
+      const optPass = state.optPassPct / 100;
+      const t3 = unopt * optPass;
+      const t4 = unopt * (1 - optPass);
+
+      const totalAscMinorRate = t1 + t2 + t3;
+      const totalMainMinorRate = t4;
+      
+      const weeklyMinor = state.totalCases * (state.minorPct / 100);
+      const weeklyMajor = state.totalCases * ((100 - state.minorPct) / 100);
+
+      document.getElementById('badgeAscTotalRate').innerText = `${(totalAscMinorRate*100).toFixed(1)}% ASC Total`;
+      
+      // Update Funnel Text dynamically
+      document.getElementById('lblTier1Subtext').innerText = `${state.delayNeg}d Delay • Neg. Screen`;
+      document.getElementById('lblTier2Subtext').innerText = `${state.delayHuman}d Delay • 1st-Pass Appr`;
+      document.getElementById('lblTier3Title').innerText = `Tier 3: ${state.delayOpt}d Opt -> ASC`;
+      document.getElementById('lblTier3Subtext').innerText = `${state.delayOpt}d Delay • Cleared at End`;
+      document.getElementById('lblTier4Title').innerText = `Tier 4: ${state.delayOpt}d Fail -> Main`;
+      document.getElementById('lblTier4Subtext').innerText = `${state.delayOpt}d Delay • Unoptimized`;
+
+      document.getElementById('tier1Pct').innerText = `${(t1*100).toFixed(1)}%`;
+      document.getElementById('tier2Pct').innerText = `${(t2*100).toFixed(1)}%`;
+      document.getElementById('tier3Pct').innerText = `${(t3*100).toFixed(1)}%`;
+      document.getElementById('tier4Pct').innerText = `${(t4*100).toFixed(1)}%`;
+
+      document.getElementById('tier1Cases').innerText = `${Math.round(weeklyMinor*t1)}/wk`;
+      document.getElementById('tier2Cases').innerText = `${Math.round(weeklyMinor*t2)}/wk`;
+      document.getElementById('tier3Cases').innerText = `${Math.round(weeklyMinor*t3)}/wk`;
+      document.getElementById('tier4Cases').innerText = `${Math.round(weeklyMinor*t4)}/wk`;
+
+      // Wait Times Calculation
+      const avgPacDelay = (t1*state.delayNeg) + (t2*state.delayHuman) + ((t3+t4)*state.delayOpt);
+      document.getElementById('kpiAvgPacDelay').innerText = `${avgPacDelay.toFixed(1)}d`;
+
+      const seqT1 = state.delayNeg + state.ascBacklog;
+      const seqT2 = state.delayHuman + state.ascBacklog;
+      const seqT3 = state.delayOpt + state.ascBacklog;
+      const seqT4 = state.delayOpt + state.mainBacklog;
+      const seqMaj = 0 + state.mainBacklog;
+
+      const parT1 = state.delayNeg + state.ascBacklog;
+      const parT2 = state.delayHuman + state.ascBacklog;
+      const parT3 = state.delayOpt + Math.min(state.ascBacklog, 5);
+      const parT4 = Math.max(state.delayOpt + state.safetyBuffer, state.delayHuman + state.mainBacklog);
+      const parMaj = 0 + state.mainBacklog;
+
+      const weightedSeqMinor = (t1*seqT1) + (t2*seqT2) + (t3*seqT3) + (t4*seqT4);
+      const weightedParMinor = (t1*parT1) + (t2*parT2) + (t3*parT3) + (t4*parT4);
+      const t4Savings = seqT4 - parT4;
+
+      document.getElementById('kpiParallelWait').innerText = `${weightedParMinor.toFixed(1)}d`;
+      document.getElementById('kpiSeqWait').innerText = `${weightedSeqMinor.toFixed(1)}d`;
+      document.getElementById('kpiWaitDiff').innerText = `-${(weightedSeqMinor - weightedParMinor).toFixed(1)}d`;
+      
+      document.getElementById('kpiTier4Wait').innerText = `${parT4.toFixed(1)}d`;
+      document.getElementById('kpiTier4Saved').innerText = `-${t4Savings.toFixed(1)}d`;
+      document.getElementById('kpiTier4SeqWait').innerText = `${seqT4.toFixed(1)}d`;
+
+      // Insights & Rules Dynamic Texts
+      document.getElementById('chartSubtitle').innerText = `Sequential Hold (Day ${state.delayOpt}) vs Parallel Pre-Booking (Day ${state.delayHuman})`;
+      document.getElementById('insightHumanDay').innerText = state.delayHuman;
+      document.getElementById('insightTargetDay').innerText = parT4.toFixed(0);
+      document.getElementById('insightOptDay').innerText = state.delayOpt;
+      document.getElementById('insightSavings').innerText = t4Savings.toFixed(1);
+
+      const releaseDays = Math.max(0, parT4 - state.delayOpt);
+      document.getElementById('rule1Ratio').innerText = state.ascRatio;
+      document.getElementById('rule2Title').innerText = `2. Day-${state.delayHuman} Pre-Booking`;
+      document.getElementById('rule2HumanDay').innerText = state.delayHuman;
+      document.getElementById('rule2TargetDay').innerText = parT4.toFixed(0);
+      document.getElementById('rule2OptDay').innerText = state.delayOpt;
+      document.getElementById('rule3OptDay').innerText = state.delayOpt;
+      document.getElementById('rule3AdvDays').innerText = releaseDays.toFixed(0);
+
+      // Capacity Balance Check
+      const ascVolume = weeklyMinor * totalAscMinorRate;
+      const mainVolume = weeklyMajor + (weeklyMinor * totalMainMinorRate);
+      const totalVolume = ascVolume + mainVolume;
+      const actAscPct = (ascVolume / totalVolume) * 100;
+      const actMainPct = (mainVolume / totalVolume) * 100;
+
+      document.getElementById('kpiAscShare').innerText = `${actAscPct.toFixed(1)}%`;
+      document.getElementById('kpiMainShare').innerText = `${actMainPct.toFixed(1)}%`;
+      document.getElementById('kpiSplitBar').style.width = `${actAscPct}%`;
+
+      const actRatio = mainVolume > 0 ? (ascVolume / mainVolume) : 0;
+      document.getElementById('kpiCapacityRatio').innerText = `${actRatio.toFixed(2)}`;
+
+      const statText = document.getElementById('balanceStatusText');
+      const balIcon = document.getElementById('balanceIcon');
+      // Buffer of +- 15% relative to target
+      const lowerBound = state.ascRatio * 0.85;
+      const upperBound = state.ascRatio * 1.15;
+
+      if(actRatio >= lowerBound && actRatio <= upperBound) {
+        statText.innerHTML = 'Optimal Alignment';
+        statText.className = 'font-semibold text-emerald-600 text-[11px]';
+        balIcon.className = 'w-4 h-4 text-emerald-500';
+      } else if(actRatio < lowerBound) {
+        statText.innerHTML = 'Main Hospital Bottlenecked';
+        statText.className = 'font-semibold text-rose-600 text-[11px]';
+        balIcon.className = 'w-4 h-4 text-rose-500';
+      } else {
+        statText.innerHTML = 'ASC Overloaded (Excess Minor)';
+        statText.className = 'font-semibold text-amber-600 text-[11px]';
+        balIcon.className = 'w-4 h-4 text-amber-500';
+      }
+
+      // Chart Update
+      const labels = [
+        `T1 (${state.delayNeg}d)`,
+        `T2 (${state.delayHuman}d)`,
+        `T3 (${state.delayOpt}d -> ASC)`,
+        `T4 (${state.delayOpt}d -> Main)`,
+        `Major Cases`
+      ];
+      if (waitChart) {
+        waitChart.data.labels = labels;
+        waitChart.data.datasets[0].data = [seqT1, seqT2, seqT3, seqT4, seqMaj];
+        waitChart.data.datasets[1].data = [parT1, parT2, parT3, parT4, parMaj];
+        waitChart.data.datasets[1].label = `Parallel Day-${state.delayHuman} Pre-Booking`;
+        waitChart.update();
+      }
+
+      // Block Allocator Updates
+      document.getElementById('allocAscCases').innerText = `${Math.round(ascVolume)}/wk`;
+      document.getElementById('allocMainCases').innerText = `${Math.round(mainVolume)}/wk`;
+      const ascDays = ascVolume / 5.0; // Assume 5 minor/day
+      const mainDays = (weeklyMajor / 2.0) + ((weeklyMinor * totalMainMinorRate) / 4.2); // mixed major/minor rate
+      document.getElementById('allocAscDays').innerText = `${ascDays.toFixed(1)}d`;
+      document.getElementById('allocMainDays').innerText = `${mainDays.toFixed(1)}d`;
+
+      renderRoster(state.surgeonCount, state.ascRatio);
+    }
+
+    function renderRoster(count, targetRatio) {
+      const tbody = document.getElementById('rosterTableBody');
+      tbody.innerHTML = '';
+      
+      // Determine base integer blocks for simple display
+      // e.g. Ratio 2.5 -> Multiply to get integers, say 5 ASC, 2 Main per cycle.
+      // But for simple viz, we round to nearest readable pattern.
+      let ascBlocks = Math.round(targetRatio);
+      let mainBlocks = 1; 
+      let total = ascBlocks + mainBlocks;
+
+      for (let i = 0; i < count; i++) {
+        let blocksHtml = '';
+        for(let j=0; j<total; j++) {
+           if(j < ascBlocks) {
+             blocksHtml += `<span class="inline-block px-1 py-0.5 m-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 rounded font-semibold">ASC</span>`;
+           } else {
+             blocksHtml += `<span class="inline-block px-1 py-0.5 m-0.5 bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300 rounded font-semibold">Main</span>`;
+           }
+        }
+        
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+            <td class="p-1.5 px-2 font-medium text-slate-800 dark:text-slate-200">Surgeon ${i+1}</td>
+            <td class="p-1.5 text-center">${blocksHtml}</td>
+          </tr>
+        `;
+      }
+    }
+
+    function initChart() {
+      const ctx = document.getElementById('waitChart').getContext('2d');
+      waitChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [
+            { label: 'Sequential Hold (Days)', data: [], backgroundColor: '#94a3b8', borderRadius: 4, maxBarThickness: 24 },
+            { label: 'Parallel Pre-Booking', data: [], backgroundColor: '#0d9488', borderRadius: 4, maxBarThickness: 24 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
+            y: { grid: { color: '#f1f5f9' }, beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function copyExecutiveReport() {
+      const text = `SURGICAL SIMULATOR: EXECUTIVE REPORT
+Target Ratio: ${state.ascRatio}:1 ASC to Main
+PAC Delays: Neg(${state.delayNeg}d), 1st-Pass(${state.delayHuman}d), Opt(${state.delayOpt}d)
+
+Overall Minor Wait: ${document.getElementById('kpiParallelWait').innerText}
+Tier 4 Tail Delay: ${document.getElementById('kpiTier4Wait').innerText}
+Actual Capacity Split: ${document.getElementById('kpiAscShare').innerText} ASC / ${document.getElementById('kpiMainShare').innerText} Main`;
+      
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      showToast('Copied Executive Summary!');
+    }
+
+    function downloadJSON() {
+      const data = { timestamp: new Date().toISOString(), params: state };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `surgical-sim-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Exported JSON successfully!');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      t.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 2500);
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
